@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>啤酒遊戲線上教學儀表板 | MIT Sloan Beer Distribution Game (長鞭效應模擬)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background-color: #fafaf9; /* warm stone background */
+    }
+    .canvas-container {
+      touch-action: none;
+    }
+  </style>
+</head>
+<body class="text-stone-800 antialiased min-h-screen flex flex-col">
+
+  <!-- 頂部導航列 (Navbar) -->
+  <header class="bg-amber-950 text-amber-50 shadow-md sticky top-0 z-30 border-b border-amber-900">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap justify-between items-center gap-3">
+      <div class="flex items-center space-x-3">
+        <div class="bg-amber-600 p-2 rounded-lg text-white shadow-inner">
+          <i class="fa-solid fa-beer-mug-empty text-xl"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold tracking-tight">啤酒遊戲：供應鏈長鞭效應教學儀表板</h1>
+            <span class="text-xs bg-amber-800 text-amber-200 px-2 py-0.5 rounded-full font-mono">MIT Sloan SD</span>
+          </div>
+          <p class="text-xs text-amber-300">Jay Forrester & John Sterman 經典系統動力學體驗模擬 (Beer Distribution Game)</p>
+        </div>
+      </div>
+
+      <!-- 右側控制動作 -->
+      <div class="flex items-center flex-wrap gap-2">
+        <span id="currentWeekBadge" class="bg-amber-900/90 border border-amber-700/60 px-3 py-1 rounded-lg text-xs font-mono font-bold text-amber-300">
+          第 1 / 36 週
+        </span>
+        <span id="gameStatusBadge" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-900">
+          運作中 (In Progress)
+        </span>
+        <button id="openSketchModalBtn" class="bg-amber-700 hover:bg-amber-600 text-amber-50 text-xs px-3 py-1.5 rounded-lg border border-amber-500 font-semibold transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-pen-fancy"></i> 手繪顧客需求曲線 (心智揭秘)
+        </button>
+        <button id="openCausalModalBtn" class="bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs px-3 py-1.5 rounded-lg border border-stone-600 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-diagram-project"></i> 系統結構解析
+        </button>
+        <button id="openSubmitModalBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3.5 py-1.5 rounded-lg font-semibold shadow transition flex items-center gap-1.5">
+          <i class="fa-solid fa-cloud-arrow-up"></i> 登錄成績至 Google 試算表
+        </button>
+        <button id="exportCsvBtn" class="bg-stone-700 hover:bg-stone-600 text-white text-xs px-2.5 py-1.5 rounded-lg transition" title="匯出 CSV">
+          <i class="fa-solid fa-file-csv"></i>
+        </button>
+        <button id="resetBtn" class="bg-rose-800/80 hover:bg-rose-700 text-white text-xs px-2.5 py-1.5 rounded-lg transition" title="重新開始">
+          <i class="fa-solid fa-rotate-left"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主要內容區 -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex-1 w-full space-y-4">
+
+    <!-- 頂部角色切換與 KPI 關鍵指標列 -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-3.5">
+      <!-- 角色控制選單卡片 -->
+      <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm flex flex-col justify-between">
+        <div class="space-y-2">
+          <div class="flex justify-between items-center text-xs">
+            <span class="font-bold text-stone-700 flex items-center gap-1">
+              <i class="fa-solid fa-user-gear text-amber-600"></i> 我扮演的供應鏈角色:
+            </span>
+            <span class="text-[10px] text-stone-400">可隨時切換</span>
+          </div>
+          <select id="roleSelect" class="w-full text-xs font-semibold px-2.5 py-1.5 border border-stone-300 rounded-lg bg-stone-50 focus:ring-2 focus:ring-amber-500 focus:outline-none">
+            <option value="retailer" selected>零售商 (Retailer) - 面對最終消費者</option>
+            <option value="wholesaler">批發商 (Wholesaler)</option>
+            <option value="distributor">經銷商 (Distributor)</option>
+            <option value="factory">釀造工廠 (Factory) - 排程自身產線</option>
+            <option value="all">👑 四節點全控模式 (God Mode)</option>
+          </select>
+        </div>
+
+        <div class="pt-2 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-500">
+          <span>AI 隊友下單模型:</span>
+          <select id="aiPolicySelect" class="text-[11px] px-1.5 py-0.5 border border-stone-200 rounded bg-white">
+            <option value="heuristic" selected>Sterman 典型行為 (忽視在途)</option>
+            <option value="naive">跟隨上期 (Naive)</option>
+            <option value="rational">理性控制 (錨定管線庫存)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- KPI 1: 供應鏈總營運成本 -->
+      <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm">
+        <div class="flex items-center justify-between text-stone-500 text-xs mb-1">
+          <span>四環節總成本 (Total Chain Cost)</span>
+          <i class="fa-solid fa-coins text-amber-500"></i>
+        </div>
+        <div id="kpiTotalCost" class="text-xl font-bold text-amber-800">$24.0</div>
+        <div class="text-[11px] text-stone-400 mt-2 flex justify-between">
+          <span>庫存費: $0.5/箱/週</span>
+          <span class="text-rose-500 font-semibold">欠貨費: $1.0/箱/週</span>
+        </div>
+      </div>
+
+      <!-- KPI 2: 當前顧客實際需求與長鞭放大比率 -->
+      <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm">
+        <div class="flex items-center justify-between text-stone-500 text-xs mb-1">
+          <span>終端顧客需求 (Customer Demand)</span>
+          <i class="fa-solid fa-cart-shopping text-blue-500"></i>
+        </div>
+        <div class="flex items-baseline gap-2">
+          <div id="kpiCustomerDemand" class="text-xl font-bold text-slate-800">4 箱/週</div>
+          <span class="text-xs text-stone-400 font-medium">(第5週升至8箱)</span>
+        </div>
+        <div class="text-[11px] text-stone-500 mt-2 flex justify-between">
+          <span>長鞭放大比率:</span>
+          <span id="kpiBullwhipRatio" class="font-bold text-rose-600">1.0 x</span>
+        </div>
+      </div>
+
+      <!-- KPI 3: 我的現有庫存與欠貨量 -->
+      <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm">
+        <div class="flex items-center justify-between text-stone-500 text-xs mb-1">
+          <span>我的庫存狀態 (My Node Status)</span>
+          <i class="fa-solid fa-boxes-stacked text-emerald-500"></i>
+        </div>
+        <div class="flex justify-between items-baseline">
+          <div>
+            <span class="text-xs text-stone-400">現有庫存:</span>
+            <div id="kpiMyInventory" class="text-xl font-bold text-emerald-600">12 箱</div>
+          </div>
+          <div>
+            <span class="text-xs text-stone-400">累計欠貨:</span>
+            <div id="kpiMyBacklog" class="text-xl font-bold text-slate-700">0 箱</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 四大層級供應鏈即時傳遞圖 (The 4-Tier Supply Chain Topology) -->
+    <section class="bg-white rounded-xl border border-stone-200 shadow-sm p-4">
+      <div class="flex justify-between items-center mb-3">
+        <h2 class="text-xs font-bold text-stone-700 flex items-center gap-1.5">
+          <i class="fa-solid fa-truck-ramp-box text-amber-600"></i> 供應鏈四大實體環節即時狀態 (4-Stage Pipeline Flow)
+        </h2>
+        <span class="text-[11px] text-stone-400">每個運送/訂單管線皆具備 2 週延遲 (Lead Time = 2 Weeks)</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 relative">
+        <!-- 節點 1: 零售商 -->
+        <div class="p-3 bg-blue-50/70 border border-blue-200 rounded-xl relative">
+          <div class="flex justify-between items-center mb-1">
+            <span class="text-xs font-bold text-blue-800">1. 零售商 (Retailer)</span>
+            <span class="text-[10px] bg-blue-200 text-blue-900 px-1.5 py-0.2 rounded font-medium">終端接觸</span>
+          </div>
+          <div class="text-[11px] text-stone-600 space-y-0.5">
+            <div id="cardRetailerInv" class="font-medium">庫存 12 / 欠貨 0</div>
+            <div id="cardRetailerOrder" class="text-blue-700">上期下單: 4 箱</div>
+            <div class="flex justify-between text-[10px] text-stone-400 pt-1 border-t border-blue-100">
+              <span>累計成本:</span>
+              <span id="cardRetailerCost" class="font-bold text-stone-700">$6.0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 節點 2: 批發商 -->
+        <div class="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl relative">
+          <div class="flex justify-between items-center mb-1">
+            <span class="text-xs font-bold text-emerald-800">2. 批發商 (Wholesaler)</span>
+            <span class="text-[10px] bg-emerald-200 text-emerald-900 px-1.5 py-0.2 rounded font-medium">中繼流通</span>
+          </div>
+          <div class="text-[11px] text-stone-600 space-y-0.5">
+            <div id="cardWholesalerInv" class="font-medium">庫存 12 / 欠貨 0</div>
+            <div id="cardWholesalerOrder" class="text-emerald-700">上期下單: 4 箱</div>
+            <div class="flex justify-between text-[10px] text-stone-400 pt-1 border-t border-emerald-100">
+              <span>累計成本:</span>
+              <span id="cardWholesalerCost" class="font-bold text-stone-700">$6.0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 節點 3: 經銷商 -->
+        <div class="p-3 bg-amber-50/70 border border-amber-200 rounded-xl relative">
+          <div class="flex justify-between items-center mb-1">
+            <span class="text-xs font-bold text-amber-800">3. 經銷商 (Distributor)</span>
+            <span class="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded font-medium">一級分銷</span>
+          </div>
+          <div class="text-[11px] text-stone-600 space-y-0.5">
+            <div id="cardDistributorInv" class="font-medium">庫存 12 / 欠貨 0</div>
+            <div id="cardDistributorOrder" class="text-amber-700">上期下單: 4 箱</div>
+            <div class="flex justify-between text-[10px] text-stone-400 pt-1 border-t border-amber-100">
+              <span>累計成本:</span>
+              <span id="cardDistributorCost" class="font-bold text-stone-700">$6.0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 節點 4: 工廠 -->
+        <div class="p-3 bg-rose-50/70 border border-rose-200 rounded-xl relative">
+          <div class="flex justify-between items-center mb-1">
+            <span class="text-xs font-bold text-rose-800">4. 釀造工廠 (Factory)</span>
+            <span class="text-[10px] bg-rose-200 text-rose-900 px-1.5 py-0.2 rounded font-medium">源頭釀造</span>
+          </div>
+          <div class="text-[11px] text-stone-600 space-y-0.5">
+            <div id="cardFactoryInv" class="font-medium">庫存 12 / 欠貨 0</div>
+            <div id="cardFactoryOrder" class="text-rose-700">上期排產: 4 箱</div>
+            <div class="flex justify-between text-[10px] text-stone-400 pt-1 border-t border-rose-100">
+              <span>累計成本:</span>
+              <span id="cardFactoryCost" class="font-bold text-stone-700">$6.0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 決策控制室 (Decision Cockpit) -->
+    <section class="bg-white rounded-xl border border-stone-200 shadow-sm p-4">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b border-stone-100 pb-3 mb-3">
+        <div>
+          <h3 class="text-sm font-bold text-stone-800 flex items-center gap-1.5">
+            <i class="fa-solid fa-sliders text-amber-600"></i> 
+            <span id="decisionRoleTitle">零售商 (Retailer)</span> 決策控制台
+          </h3>
+          <p class="text-[11px] text-stone-500">綜合評估本週到貨、下游訂單與在途管道庫存，發出最佳訂單決策</p>
+        </div>
+
+        <!-- 典型策略按鈕 -->
+        <div class="flex items-center gap-1.5 text-xs">
+          <span class="text-stone-400 mr-1 text-[11px]">快速策略:</span>
+          <button id="presetEquilibrium" class="px-2 py-0.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded text-xs transition">
+            維持基準 (4箱)
+          </button>
+          <button id="presetPanicHoard" class="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-xs transition">
+            恐慌超額囤貨 (24箱)
+          </button>
+          <button id="presetRational" class="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-xs transition">
+            理性對齊需求 (8箱)
+          </button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 items-center">
+        <!-- 狀態資訊列 -->
+        <div class="grid grid-cols-2 gap-2 text-xs text-stone-600 bg-stone-50 p-3 rounded-lg border border-stone-100">
+          <div>本週收到貨物: <b id="incomingShipmentVal" class="text-emerald-700 font-mono">4 箱</b></div>
+          <div>本週收到訂單: <b id="incomingOrderVal" class="text-blue-700 font-mono">4 箱</b></div>
+          <div>在途訂單(2週): <span id="pipelineOrdersVal" class="font-mono text-stone-700">4, 4 箱</span></div>
+          <div>在途貨物(2週): <span id="pipelineShipmentsVal" class="font-mono text-stone-700">4, 4 箱</span></div>
+        </div>
+
+        <!-- 單一角色下單滑桿 -->
+        <div class="space-y-1.5">
+          <div class="flex justify-between items-center text-xs">
+            <label id="orderInputLabel" class="font-semibold text-stone-700">本週向上游訂購量 (Cases)</label>
+            <span id="valOrder" class="font-mono font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded text-xs">4 箱</span>
+          </div>
+          <input id="sliderOrder" type="range" min="0" max="60" step="1" value="4" class="w-full accent-amber-600 cursor-pointer">
+          <div class="flex justify-between text-[10px] text-stone-400">
+            <span>0 箱</span>
+            <span>20 箱</span>
+            <span>40 箱</span>
+            <span>60 箱</span>
+          </div>
+        </div>
+
+        <!-- 四角色全控模式 (隱藏式) -->
+        <div id="multiControlBox" class="hidden grid grid-cols-4 gap-2 text-xs">
+          <div>
+            <label class="block text-[10px] text-stone-500">零售商訂單</label>
+            <input id="inputOrderRetailer" type="number" min="0" max="100" value="4" class="w-full border rounded px-1.5 py-1 text-center font-mono">
+          </div>
+          <div>
+            <label class="block text-[10px] text-stone-500">批發商訂單</label>
+            <input id="inputOrderWholesaler" type="number" min="0" max="100" value="4" class="w-full border rounded px-1.5 py-1 text-center font-mono">
+          </div>
+          <div>
+            <label class="block text-[10px] text-stone-500">經銷商訂單</label>
+            <input id="inputOrderDistributor" type="number" min="0" max="100" value="4" class="w-full border rounded px-1.5 py-1 text-center font-mono">
+          </div>
+          <div>
+            <label class="block text-[10px] text-stone-500">工廠排產</label>
+            <input id="inputOrderFactory" type="number" min="0" max="100" value="4" class="w-full border rounded px-1.5 py-1 text-center font-mono">
+          </div>
+        </div>
+
+        <!-- 推進按鈕 -->
+        <div class="flex gap-2">
+          <button id="stepOneWeekBtn" class="flex-1 bg-amber-700 hover:bg-amber-600 text-white font-semibold py-2.5 px-3 rounded-lg text-xs shadow-sm transition flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-forward-step"></i> 提交訂單並推進 1 週
+          </button>
+          <button id="stepFourWeeksBtn" class="bg-amber-100 hover:bg-amber-200 text-amber-900 font-semibold py-2.5 px-3 rounded-lg text-xs transition flex items-center justify-center gap-1">
+            <i class="fa-solid fa-forward-fast"></i> 推進 4 週
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 系統動力學即時圖表區 (3 大核心圖表) -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-3.5">
+      <!-- 圖 1: 訂單波動與長鞭效應 -->
+      <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm">
+        <div class="flex justify-between items-center mb-1.5">
+          <h3 class="text-xs font-bold text-stone-800 flex items-center gap-1">
+            <i class="fa-solid fa-chart-line text-rose-500"></i> 各節點訂單與長鞭放大 (Orders)
+          </h3>
+        </div>
+        <div class="h-60">
+          <canvas id="chartOrders"></canvas>
+        </div>
+      </div>
+
+      <!-- 圖 2: 淨庫存與欠貨震盪 -->
+      <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm">
+        <div class="flex justify-between items-center mb-1.5">
+          <h3 class="text-xs font-bold text-stone-800 flex items-center gap-1">
+            <i class="fa-solid fa-layer-group text-blue-500"></i> 各節點淨庫存與欠貨 (Inventory)
+          </h3>
+        </div>
+        <div class="h-60">
+          <canvas id="chartInventory"></canvas>
+        </div>
+      </div>
+
+      <!-- 圖 3: 累計成本成長軌跡 -->
+      <div class="bg-white p-3.5 rounded-xl border border-stone-200 shadow-sm">
+        <div class="flex justify-between items-center mb-1.5">
+          <h3 class="text-xs font-bold text-stone-800 flex items-center gap-1">
+            <i class="fa-solid fa-money-bill-wave text-amber-600"></i> 各節點與全鏈累計成本 ($)
+          </h3>
+        </div>
+        <div class="h-60">
+          <canvas id="chartCosts"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- 每週四節點進度與庫存明細表格 (Historical Log) -->
+    <section class="bg-white rounded-xl border border-stone-200 shadow-sm p-4">
+      <div class="flex justify-between items-center mb-2.5">
+        <div>
+          <h3 class="text-xs font-bold text-stone-800 flex items-center gap-1.5">
+            <i class="fa-solid fa-table-list text-amber-700"></i> 每週四節點進度與庫存成本明細 (Weekly Log)
+          </h3>
+          <p class="text-[11px] text-stone-500">完整記錄每週狀態與決策，將批次同步至 Google 試算表工作表 2</p>
+        </div>
+        <span class="text-xs text-stone-400 font-mono">36-Week Standard Simulation</span>
+      </div>
+
+      <div class="overflow-x-auto max-h-60 border border-stone-100 rounded-lg">
+        <table class="w-full text-left border-collapse font-mono text-xs">
+          <thead class="bg-stone-50 text-[11px] font-semibold text-stone-600 sticky top-0 shadow-sm">
+            <tr>
+              <th class="py-2 px-3">週次</th>
+              <th class="py-2 px-3">顧客需求</th>
+              <th class="py-2 px-3 text-blue-600">零售商 (訂單/淨庫存)</th>
+              <th class="py-2 px-3 text-emerald-600">批發商 (訂單/淨庫存)</th>
+              <th class="py-2 px-3 text-amber-600">經銷商 (訂單/淨庫存)</th>
+              <th class="py-2 px-3 text-rose-600">工廠 (排產/淨庫存)</th>
+              <th class="py-2 px-3">全鏈累計成本</th>
+            </tr>
+          </thead>
+          <tbody id="logTableBody" class="divide-y divide-stone-100 text-stone-600 text-xs">
+            <!-- 由 app.js 動態渲染 -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 頁尾 -->
+  <footer class="bg-white border-t border-stone-200 py-3 text-center text-xs text-stone-500">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+      <p>© MIT Sloan System Dynamics Group. Adapted for Interactive Teaching Dashboard.</p>
+      <p class="text-stone-400">Single Spreadsheet, Two-Sheet Architecture with Google Apps Script Webhook</p>
+    </div>
+  </footer>
+
+  <!-- 模態視窗 1: 系統結構與因果迴路解析 (Causal Loop Explanation) -->
+  <div id="causalModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-stone-200 p-6 space-y-4">
+      <div class="flex justify-between items-center border-b border-stone-100 pb-3">
+        <h3 class="text-base font-bold text-stone-800 flex items-center gap-2">
+          <i class="fa-solid fa-diagram-project text-amber-700"></i> 啤酒遊戲三大核心系統動力學結構 (System Dynamics Insights)
+        </h3>
+        <button id="closeCausalModalBtn" class="text-stone-400 hover:text-stone-600 text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3.5 text-xs text-stone-600 leading-relaxed">
+        <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+          <h4 class="font-bold text-amber-900 text-sm mb-1">1. 資訊與實體雙重延遲 (Information & Material Delays)</h4>
+          <p>每個環節向上游下單需要 2 週訂單傳遞延遲，上游出貨給下游也需要 2 週運輸延遲（工廠則需要 2 週釀造生產延遲）。從零售商下單到真正收到啤酒，總共存在長達 4 週的反應延遲！延遲是誘發系統震盪的核心物理結構。</p>
+        </div>
+
+        <div class="p-3 bg-rose-50 border border-rose-200 rounded-xl">
+          <h4 class="font-bold text-rose-900 text-sm mb-1">2. 忽略在途庫存的心智盲點 (Ignoring the Supply Line)</h4>
+          <p>當顧客需求在第 5 週從 4 箱微增至 8 箱時，下游庫存迅速被耗盡。決策者在面對缺貨時，往往只看到眼前的現有庫存與欠貨，卻嚴重忽略了「自己過去幾週已經發出、但仍在途中的大量貨物」。於是在恐慌中重複下單，製造巨額「虛假訂單 (Phantom Orders)」。</p>
+        </div>
+
+        <div class="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+          <h4 class="font-bold text-blue-900 text-sm mb-1">3. 基本歸因偏誤 (Fundamental Attribution Error)</h4>
+          <p>遊戲後期，先前下達的大量在途貨物大批湧入，但終端需求早已滿足，各環節庫存嚴重爆倉。玩家往往互相指責：「一定是客戶瘋狂訂購又退訂」、「上游工廠根本不會調配生產」。事實上，顧客需求僅僅從 4 箱變為 8 箱並長期恆定，所有的混亂完全是系統內部參與者的決策反饋「內生 (Endogenous)」製造出來的！</p>
+        </div>
+      </div>
+
+      <div class="text-right pt-2 border-t border-stone-100">
+        <button onclick="document.getElementById('causalModal').classList.add('hidden')" class="px-4 py-2 bg-amber-700 hover:bg-amber-600 text-white font-medium rounded-lg text-xs">
+          我瞭解了，返回模擬
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模態視窗 2: 手繪心智模型畫布 (Mental Model Sketching Canvas) -->
+  <div id="sketchModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-stone-200 p-6 space-y-4">
+      <div class="flex justify-between items-center border-b border-stone-100 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-stone-800 flex items-center gap-1.5">
+            <i class="fa-solid fa-pen-fancy text-amber-700"></i> 手繪心智模型：你認為「終端顧客訂單」長怎樣？
+          </h3>
+          <p class="text-xs text-stone-500">非零售商玩家（批發商、經銷商、工廠）請用滑鼠或觸控筆在下方畫出你猜想的顧客需求走勢！</p>
+        </div>
+        <button id="closeSketchModalBtn" class="text-stone-400 hover:text-stone-600 text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="relative w-full h-56 bg-slate-50 border border-slate-300 rounded-xl canvas-container overflow-hidden">
+        <canvas id="sketchCanvas" class="w-full h-full cursor-crosshair"></canvas>
+      </div>
+
+      <div class="flex justify-between items-center">
+        <div class="flex gap-2">
+          <button id="clearSketchBtn" class="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded text-xs transition">
+            清除重畫
+          </button>
+          <button id="revealTrueDemandBtn" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded text-xs shadow transition flex items-center gap-1">
+            <i class="fa-solid fa-eye"></i> 揭曉真實顧客需求真相！
+          </button>
+        </div>
+        <span class="text-[11px] text-stone-400">紅線: 你的猜想 / 綠線: 真實數據</span>
+      </div>
+
+      <div id="sketchDebriefText" class="hidden p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 leading-relaxed">
+        <h4 class="font-bold text-sm mb-1">🎉 震撼對比與教學啟示：</h4>
+        <p>如綠線所示，<b>真實顧客需求僅在第 5 週由每週 4 箱微升至 8 箱，之後整整 30+ 週完全恆定不變（Constant Demand）！</b></p>
+        <p class="mt-1">幾乎所有上游玩家都深信「顧客需求肯定暴增到幾十箱甚至上百箱」。這證明了：<b>混亂並非外部環境所致，而是系統內部的結構與人類認知的延遲盲點所創造出來的！</b></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模態視窗 3: 登錄成績至 Google 試算表 (Two-Sheet Submit Modal) -->
+  <div id="submitModal" class="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-stone-200 p-6 space-y-4">
+      <div class="flex justify-between items-center border-b border-stone-100 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-stone-800 flex items-center gap-2">
+            <i class="fa-solid fa-cloud-arrow-up text-emerald-600"></i> 登錄成績至 Google 試算表
+          </h3>
+          <p class="text-xs text-stone-500">採用單一試算表、雙工作表 (Two-Sheet) 架構批次寫入</p>
+        </div>
+        <button id="closeSubmitModalBtn" class="text-stone-400 hover:text-stone-600 text-lg">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <form id="submitForm" class="space-y-3.5">
+        <div>
+          <label class="block text-xs font-semibold text-stone-700 mb-1">Google Apps Script Web App URL <span class="text-rose-500">*</span></label>
+          <input id="inputGasUrl" type="url" required placeholder="https://script.google.com/macros/s/.../exec" class="w-full text-xs px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono">
+          <p class="text-[10px] text-stone-400 mt-0.5">請輸入授課教師部署之 GAS 網路應用程式網址</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-stone-700 mb-1">班級 / 組別</label>
+            <input id="inputClassName" type="text" placeholder="例如：供應鏈管理甲班" class="w-full text-xs px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-stone-700 mb-1">學號 <span class="text-rose-500">*</span></label>
+            <input id="inputStudentId" type="text" required placeholder="例如：M1120901" class="w-full text-xs px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-stone-700 mb-1">學生姓名 <span class="text-rose-500">*</span></label>
+          <input id="inputStudentName" type="text" required placeholder="例如：陳大明" class="w-full text-xs px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-stone-700 mb-1">心得筆記或分析報告連結 (選填)</label>
+          <input id="inputReportUrl" type="url" placeholder="https://docs.google.com/..." class="w-full text-xs px-3 py-2 border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+        </div>
+
+        <div class="bg-stone-50 border border-stone-200 rounded-lg p-3 text-[11px] text-stone-600 space-y-1">
+          <div class="font-semibold text-stone-700">寫入雙工作表架構說明：</div>
+          <p>• <b>工作表 1 (總成績與排行榜)</b>：寫入個人與供應鏈總成本、長鞭比率與最大庫存/欠貨。</p>
+          <p>• <b>工作表 2 (每週明細日誌)</b>：完整記錄 36 週四節點各自的訂單、淨庫存、在途貨物與累計成本。</p>
+        </div>
+
+        <div id="submitStatusMsg" class="hidden text-xs"></div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t border-stone-100">
+          <button type="button" id="cancelSubmitBtn" class="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium rounded-lg text-xs transition">
+            取消
+          </button>
+          <button type="submit" id="submitBtn" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg text-xs shadow-sm transition">
+            確認送出
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 引入模組腳本 -->
+  <script src="engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
